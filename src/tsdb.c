@@ -262,6 +262,8 @@ SeriesIterator SeriesQuery(Series *series, timestamp_t start_ts, timestamp_t end
 // Fill the first sample
 ChunkResult SeriesIteratorGetFirstInRange(SeriesIterator *iterator, Sample *sample) {
     ChunkResult res;
+    Sample lastSample = {.timestamp = -1};
+    bool rev = iterator->reverse;
     ChunkFuncs *funcs = iterator->series->funcs;
 
     // Deal with empty series
@@ -269,23 +271,14 @@ ChunkResult SeriesIteratorGetFirstInRange(SeriesIterator *iterator, Sample *samp
         return CR_END;
     }
 
-    res = iterator->GetNext(iterator->chunkIterator, sample);
-    while (res == CR_OK && (sample->timestamp < iterator->minTimestamp ||
-                            sample->timestamp > iterator->maxTimestamp)) {
-        res = iterator->GetNext(iterator->chunkIterator, sample);
+    res = SeriesIteratorGetNext(iterator, sample);
+    while (lastSample.timestamp != sample->timestamp &&
+           ((!rev && sample->timestamp < iterator->minTimestamp) ||
+            ( rev && sample->timestamp > iterator->maxTimestamp))) {
+        lastSample.timestamp = sample->timestamp;
+        res = SeriesIteratorGetNext(iterator, sample);
     }
-
-    // Sample can be 1st in the next chunk
-    if (res != CR_OK) { 
-        return SeriesIteratorGetNext(iterator, sample);
-    }
-
-    // No sample within range
-    if (sample->timestamp > iterator->maxTimestamp ||
-        sample->timestamp < iterator->minTimestamp) {
-        return CR_END;
-    } 
-    return CR_OK;
+    return res;
 }
 
 void SeriesIteratorClose(SeriesIterator *iterator) {
